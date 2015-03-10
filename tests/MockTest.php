@@ -32,7 +32,7 @@ class MockTest extends \PHPUnit_Framework_TestCase
     
     protected function tearDown()
     {
-        $this->mock->disable();
+        Mock::disableAll();
     }
 
     /**
@@ -67,7 +67,9 @@ class MockTest extends \PHPUnit_Framework_TestCase
         time(true);
         $this->assertEquals(array(array(), array()), $recorder->getCalls());
 
-        $mock = new Mock(__NAMESPACE__, "abs", 'emptyFunc');
+        $function = function () {
+        };
+        $mock = new Mock(__NAMESPACE__, "abs", $function);
         $mock->enable();
         $recorder = $mock->getRecorder();
         $this->assertEmpty($recorder->getCalls());
@@ -138,78 +140,65 @@ class MockTest extends \PHPUnit_Framework_TestCase
     }
 
     /**
-     * Test getArgumentsList().
+     * Tests passing by value.
      *
      * @test
-     * @dataProvider gettingArgumentsListProvider
      */
-    public function testGettingArgumentsList($name, $arguments)
+    public function testPassingByValue()
     {
-        $mock = new Mock(__NAMESPACE__, $name, '\\emptyFunc');
-
-        $class = new \ReflectionClass($mock);
-        $method = $class->getMethod('getArgumentsList');
-        $method->setAccessible(true);
-
-        $this->assertEquals($arguments, $method->invoke($mock, array()));
-    }
-
-    public function gettingArgumentsListProvider()
-    {
-        return array(
-            array('exec', 'array($command, &$output, &$return_value)'),
-            array('time', 'array()'),
-            array('highlight_string', 'array($string, $return)'),
-
-        );
+        $mock = new Mock(__NAMESPACE__, "sqrt", function($a) {
+            return $a + 1;
+        });
+        $mock->enable();
+        
+        // Tests passing directly the value.
+        $this->assertEquals(3, sqrt(2));
     }
 
     /**
-     * Test Parameters List
-     *
-     * @test
-     * @dataProvider gettingParametersListProvider
-     */
-    public function testGettingParametersList($name, $parametersList)
-    {
-        $mock = new Mock(__NAMESPACE__, $name, 'emptyFunc');
-
-        $class = new \ReflectionClass($mock);
-        $method = $class->getMethod('getParametersList');
-        $method->setAccessible(true);
-
-        $this->assertEquals($parametersList, $method->invoke($mock, array()));
-    }
-
-    public function gettingParametersListProvider()
-    {
-        return array(
-            array('exec', '$command, &$output = \'optionalParameter\', &$return_value = \'optionalParameter\''),
-            array('time', ''),
-            array('highlight_string', '$string, $return = \'optionalParameter\''),
-        );
-    }
-
-    /**
-     * Test whether passing by reference does work
+     * Test passing by reference.
      *
      * @test
      */
     public function testPassingByReference()
     {
-        $mock = new Mock(__NAMESPACE__, 'exec', function($a, &$b, &$c) {
-            $b[] = 'test1';
-            $b[] = 'test2';
-            $c = 'test';
+        $mock = new Mock(__NAMESPACE__, "exec", function($a, &$b, &$c) {
+            $a   = "notExpected";
+            $b[] = "test1";
+            $b[] = "test2";
+            $c = "test";
         });
 
         $mock->enable();
+        $noReference = "expected";
         $b = array();
-        $c = '';
+        $c = "";
 
-        exec('test', $b, $c);
-        $this->assertEquals(array('test1', 'test2'), $b);
-        $this->assertEquals('test', $c);
-
+        exec($noReference, $b, $c);
+        $this->assertEquals(array("test1", "test2"), $b);
+        $this->assertEquals("test", $c);
+        $this->assertEquals("test", $c);
+        $this->assertEquals("expected", $noReference);
+    }
+    
+    /**
+     * Tests that the mock preserves the default argument
+     *
+     * @test
+     */
+    public function testPreserveArgumentDefaultValue()
+    {
+        $function = function($input, $pad_length, $pad_string = " ") {
+            return $pad_string;
+        };
+        $mock = new Mock(__NAMESPACE__, "str_pad", $function);
+        $mock->enable();
+        
+        $result1 = str_pad("foo", 5);
+        $this->assertEquals(" ", $result1);
+        
+        $mock->disable();
+        $result2 = str_pad("foo", 5);
+        $this->assertEquals("foo  ", $result2);
     }
 }
